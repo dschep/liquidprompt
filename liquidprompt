@@ -28,6 +28,7 @@
 # Aurelien Requiem  <aurelien@requiem.fr>         # Major clean refactoring, variable path length, error codes, several bugfixes.
 # Brendan Fahy      <bmfahy@gmail.com>            # postfix variable
 # Clément Mathieu   <clement@unportant.info>      # Bazaar support
+# Daniel Schep      <dschep@gmail.com>            # Ability to suppress VCS line diffs
 # David Loureiro    <david.loureiro@sysfera.com>  # small portability fix
 # Étienne Deparis   <etienne.deparis@umaneti.net> # Fossil support
 # Florian Le Frioux <florian@lefrioux.fr>         # Use ± mark when root in VCS dir.
@@ -232,6 +233,7 @@ _lp_source_config()
     LP_ENABLE_SCREEN_TITLE=${LP_ENABLE_SCREEN_TITLE:-0}
     LP_ENABLE_SSH_COLORS=${LP_ENABLE_SSH_COLORS:-0}
     LP_DISABLED_VCS_PATH=${LP_DISABLED_VCS_PATH:-""}
+    LP_SHOW_DIFF=${LP_SHOW_DIFF:-1}
 
     LP_MARK_DEFAULT=${LP_MARK_DEFAULT:-""}
     LP_MARK_BATTERY=${LP_MARK_BATTERY:-"⌁"}
@@ -750,12 +752,16 @@ _lp_git_branch_color()
         if [[ "$GD" -eq 1 || "$GDC" -eq "1" ]] ; then
             local has_line
             has_lines=$(git diff --numstat 2>/dev/null | awk 'NF==3 {plus+=$1; minus+=$2} END {printf("+%d/-%d\n", plus, minus)}')
-            if [[ "$has_commit" -gt "0" ]] ; then
-                # Changes to commit and commits to push
-                ret="${LP_COLOR_CHANGES}${branch}${NO_COL}(${LP_COLOR_DIFF}$has_lines${NO_COL},${LP_COLOR_COMMITS}$has_commit${NO_COL})${end}"
-            else
-                ret="${LP_COLOR_CHANGES}${branch}${NO_COL}(${LP_COLOR_DIFF}$has_lines${NO_COL})${end}" # changes to commit
+            local diff
+            if [[ "$LP_SHOW_DIFF" -eq 1 ]]; then
+                if [[ "$has_commit" -gt "0" ]] ; then
+                    # Changes to commit and commits to push
+                    diff="(${LP_COLOR_DIFF}$has_lines${NO_COL},${LP_COLOR_COMMITS}$has_commit${NO_COL})"
+                else
+                    diff="(${LP_COLOR_DIFF}$has_lines${NO_COL})" # changes to commit
+                fi
             fi
+            ret="${LP_COLOR_CHANGES}${branch}${NO_COL}${diff}${end}"
         else
             if [[ "$has_commit" -gt "0" ]] ; then
                 # some commit(s) to push
@@ -818,12 +824,16 @@ _lp_hg_branch_color()
         else
             local has_line
             has_lines=$(hg diff --stat 2>/dev/null | tail -n 1 | awk 'FS=" " {printf("+%s/-%s\n", $4, $6)}')
-            if [[ "$has_commit" -gt "0" ]] ; then
-                # Changes to commit and commits to push
-                ret="${LP_COLOR_CHANGES}${branch}${NO_COL}(${LP_COLOR_DIFF}$has_lines${NO_COL},${LP_COLOR_COMMITS}$has_commit${NO_COL})${has_untracked}${NO_COL}"
-            else
-                ret="${LP_COLOR_CHANGES}${branch}${NO_COL}(${LP_COLOR_DIFF}$has_lines${NO_COL})${has_untracked}${NO_COL}" # changes to commit
+            local diff
+            if [[ "$LP_SHOW_DIFF" -eq 1 ]]; then
+                if [[ "$has_commit" -gt "0" ]] ; then
+                    # Changes to commit and commits to push
+                    diff="(${LP_COLOR_DIFF}$has_lines${NO_COL},${LP_COLOR_COMMITS}$has_commit${NO_COL})"
+                else
+                    diff="(${LP_COLOR_DIFF}$has_lines${NO_COL})" # changes to commit
+                fi
             fi
+            ret="${LP_COLOR_CHANGES}${branch}${NO_COL}${diff}${has_untracked}${NO_COL}"
         fi
         echo -ne "$ret"
     fi
@@ -871,6 +881,8 @@ _lp_svn_branch_color()
         changes=$(( $(svn status $LP_SVN_STATUS_OPTIONS | grep -c -v "?") ))
         if [[ $changes -eq 0 ]] ; then
             echo "${LP_COLOR_UP}${branch}${NO_COL}"
+        elif [[ "$LP_SHOW_DIFF" -eq 1 ]]; then
+            echo "${LP_COLOR_CHANGES}${branch}${NO_COL}" # changes to commit
         else
             echo "${LP_COLOR_CHANGES}${branch}${NO_COL}(${LP_COLOR_DIFF}$changes${NO_COL})" # changes to commit
         fi
@@ -939,7 +951,7 @@ _lp_fossil_branch_color()
             C2A=""
         fi
 
-        if [[ "$ret" != "" ]] ; then
+        if [[ "$ret" != "" && "$LP_SHOW_DIFF" -eq 1 ]] ; then
             ret="(${LP_COLOR_DIFF}$ret${NO_COL})"
         fi
 
